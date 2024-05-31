@@ -1,40 +1,65 @@
-from telegram import Update, Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackContext
+import telebot
+from telebot import types
 
-# Вставьте ваш токен API здесь
-API_TOKEN = '7119687473:AAHPAgng_jKj1QKN4biqhNfjuW1MCbWx94M'
+# Your token
+TOKEN = '7458394978:AAEIg7G200HOROPmLWOe53ON8BzkGf6CLVw'
+# Your personal Telegram ID
+YOUR_TELEGRAM_ID = '476101958'
 
-# Функция для старта
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Здравствуйте! Я бот для управления очередью пациентов. Отправьте команду /join, чтобы занять очередь.')
+bot = telebot.TeleBot(TOKEN)
 
-# Функция для добавления пациента в очередь
-queue = []
+# Dictionary to store user data
+user_data = {}
 
-def join_queue(update: Update, context: CallbackContext):
-    user = update.message.from_user
-    queue.append(user.id)
-    update.message.reply_text(f'{user.first_name}, вы добавлены в очередь. Ваш номер: {len(queue)}')
+# Counters for the sequential user numbers
+first_time_counter = 0
+repeat_counter = 0
 
-# Функция для отображения очереди
-def show_queue(update: Update, context: CallbackContext):
-    if not queue:
-        update.message.reply_text('Очередь пуста.')
+# Handler for the /start command
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = types.KeyboardButton('Бори аввал')
+    btn2 = types.KeyboardButton('Такроран')
+    markup.add(btn1, btn2)
+    bot.send_message(message.chat.id, "Салом, лутфан интихоб намоед!:", reply_markup=markup)
+
+# Handler for button presses
+@bot.message_handler(func=lambda message: message.text in ['Бори аввал', 'Такроран'])
+def handle_buttons(message):
+    user_data[message.chat.id] = {'step': 1, 'type': message.text}
+    bot.send_message(message.chat.id, "Рақами Телефони худро ворид намоед:")
+
+# Handler for phone number input
+@bot.message_handler(func=lambda message: user_data.get(message.chat.id, {}).get('step') == 1)
+def handle_phone(message):
+    user_data[message.chat.id]['phone'] = message.text
+    user_data[message.chat.id]['step'] = 2
+    bot.send_message(message.chat.id, "Лутфан Ному насаби худро нависед:")
+
+# Handler for name input
+@bot.message_handler(func=lambda message: user_data.get(message.chat.id, {}).get('step') == 2)
+def handle_name(message):
+    global first_time_counter, repeat_counter
+    user_data[message.chat.id]['name'] = message.text
+    user_data[message.chat.id]['step'] = 3
+
+    if user_data[message.chat.id]['type'] == 'Бори аввал':
+        first_time_counter += 1
+        next_number = first_time_counter
     else:
-        queue_list = '\n'.join([str(i+1) + '. ' + context.bot.get_chat(user_id).first_name for i, user_id in enumerate(queue)])
-        update.message.reply_text(f'Очередь:\n{queue_list}')
+        repeat_counter += 1
+        next_number = repeat_counter
 
-# Основная функция для запуска бота
-def main():
-    updater = Updater(API_TOKEN, use_context=True)
-    dp = updater.dispatcher
-    
-    dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(CommandHandler('join', join_queue))
-    dp.add_handler(CommandHandler('queue', show_queue))
-    
-    updater.start_polling()
-    updater.idle()
+    # Send data to your personal account
+    message_text = f"Номер: {next_number}\nНому насаб: {user_data[message.chat.id]['name']}\nТелефон: {user_data[message.chat.id]['phone']}\nТип: {user_data[message.chat.id]['type']}"
+    bot.send_message(YOUR_TELEGRAM_ID, message_text)
 
-if __name__ == '__main__':
-    main()
+    # Notify the user of their registration number
+    bot.send_message(message.chat.id, f"Навбати Шумо: {next_number} ({user_data[message.chat.id]['type']})")
+
+    # Clear user data for this chat ID
+    del user_data[message.chat.id]
+
+# Start the bot
+bot.polling()
